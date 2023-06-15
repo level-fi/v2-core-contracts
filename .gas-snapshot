@@ -1,0 +1,3 @@
+DeployTreasury:test_deploy_treasury() (gas: 4534973)
+TestLevelOracle:testGetCurrentTwap() (gas: 54713)
+TestLevelOracle:testUpdateTWAP() (gas: 105620)
