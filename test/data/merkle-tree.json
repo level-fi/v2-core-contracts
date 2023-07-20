@@ -1,0 +1,45 @@
+{
+  "root": "0xa79940ba078db02617a683223d35067bdae023c3ccb35e5476440d27c3ce19a2",
+  "data": [
+    {
+      "id": 0,
+      "user": "0x83BDDF1a44f138BBEd943103058a9877AA9abb1F",
+      "amount": "1234500000000000000",
+      "chainId": 31337,
+      "proof": [
+        "0x76990eb3f810abf38415f6dfd5b1045bb8e9f0ecb8ef68e01a92bde32ff61a70",
+        "0x15e2fe328b4c1b6901c63288e88914c7af34d09e0843ca26ffbfe1e3d31c27f7"
+      ]
+    },
+    {
+      "id": 1,
+      "user": "0x3F7af9764CC55E9Cb9A773e689D72f1faC2BA9c0",
+      "amount": "1245000000000000000000",
+      "chainId": 31337,
+      "proof": [
+        "0x3477dee8164461a42e6d79670c0c732651a4bb12662d50d2f4c826704ad0cdb3",
+        "0x0a38fed452913f17379f3f8e9cb1f955143822daf215feaa65c23d3fd83d72e7"
+      ]
+    },
+    {
+      "id": 2,
+      "user": "0x38BA764aD90216d6D1c6AD35AC3Ba6d92999210F",
+      "amount": "34000000000000000000",
+      "chainId": 31337,
+      "proof": [
+        "0x73539b6988593b7141b0f91bfdc229c5549aa5ab291a7e7004469bc90915dabf",
+        "0x0a38fed452913f17379f3f8e9cb1f955143822daf215feaa65c23d3fd83d72e7"
+      ]
+    },
+    {
+      "id": 3,
+      "user": "0x6B74A5A0FD40fE3a88996166D157586B5be1e795",
+      "amount": "114000000000000000000",
+      "chainId": 31337,
+      "proof": [
+        "0x92cb3c0fb201be40f69394d63ef7f8ed692ee2849e9fe82a331d502ea5c80d14",
+        "0x15e2fe328b4c1b6901c63288e88914c7af34d09e0843ca26ffbfe1e3d31c27f7"
+      ]
+    }
+  ]
+}
