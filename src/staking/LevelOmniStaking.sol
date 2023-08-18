@@ -248,12 +248,15 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
         external
         onlyDistributorOrOwner
     {
+        uint256 _tokenLength = _tokens.length;
+        require(_amounts.length == _tokenLength, "Length miss match");
         EpochInfo memory _epochInfo = epochs[_epoch];
         require(_epochInfo.endTime != 0, "Epoch not ended");
         require(_epochInfo.allocationTime == 0, "Reward allocated");
         uint256 _beforeLLPBalance = LLP.balanceOf(address(this));
-        for (uint8 i = 0; i < _tokens.length;) {
+        for (uint8 i = 0; i < _tokenLength;) {
             uint256 _amount = _amounts[i];
+            require(_amount != 0, "Invalid amount");
             require(_amount <= IERC20(_tokens[i]).balanceOf(address(this)), "Exceeded balance");
             _convertTokenToLLP(_tokens[i], _amount);
             unchecked {
