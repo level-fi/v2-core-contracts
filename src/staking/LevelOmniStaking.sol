@@ -278,13 +278,13 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
         emit EnableNextEpochSet(_enable);
     }
 
-    function setEpochDuration(uint256 _epochDuration) public onlyOwner {
+    function setEpochDuration(uint256 _epochDuration) external onlyOwner {
         require(_epochDuration >= MIN_EPOCH_DURATION, "< MIN_EPOCH_DURATION");
         EpochInfo memory _epochInfo = epochs[currentEpoch];
         require(_epochInfo.startTime + _epochDuration >= block.timestamp, "Invalid duration");
         epochDuration = _epochDuration;
 
-        emit EpochDurationSet(epochDuration);
+        emit EpochDurationSet(_epochDuration);
     }
 
     function setClaimableToken(address _token, bool _allowed) external onlyOwner {

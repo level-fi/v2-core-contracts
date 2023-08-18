@@ -80,7 +80,7 @@ abstract contract StakingReserve is Initializable, OwnableUpgradeable {
         emit DistributorSet(distributor);
     }
 
-    function setConvertLLPTokens(address[] memory _tokens) external onlyOwner {
+    function setConvertLLPTokens(address[] calldata _tokens) external onlyOwner {
         for (uint8 i = 0; i < convertLLPTokens.length;) {
             isConvertLLPTokens[convertLLPTokens[i]] = false;
             unchecked {
