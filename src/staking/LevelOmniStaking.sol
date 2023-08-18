@@ -162,7 +162,7 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
         emit Staked(msg.sender, _to, currentEpoch, _stakedAmount, _taxAmount);
     }
 
-    function unstake(address _to, uint256 _amount) external whenNotPaused nonReentrant {
+    function unstake(address _to, uint256 _amount) external virtual nonReentrant {
         require(_to != address(0), "Invalid address");
         require(_amount > 0, "Invalid amount");
         address _sender = msg.sender;
@@ -248,12 +248,15 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
         external
         onlyDistributorOrOwner
     {
+        uint256 _tokenLength = _tokens.length;
+        require(_amounts.length == _tokenLength, "Length miss match");
         EpochInfo memory _epochInfo = epochs[_epoch];
         require(_epochInfo.endTime != 0, "Epoch not ended");
         require(_epochInfo.allocationTime == 0, "Reward allocated");
         uint256 _beforeLLPBalance = LLP.balanceOf(address(this));
-        for (uint8 i = 0; i < _tokens.length;) {
+        for (uint8 i = 0; i < _tokenLength;) {
             uint256 _amount = _amounts[i];
+            require(_amount != 0, "Invalid amount");
             require(_amount <= IERC20(_tokens[i]).balanceOf(address(this)), "Exceeded balance");
             _convertTokenToLLP(_tokens[i], _amount);
             unchecked {
@@ -275,13 +278,13 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
         emit EnableNextEpochSet(_enable);
     }
 
-    function setEpochDuration(uint256 _epochDuration) public onlyOwner {
+    function setEpochDuration(uint256 _epochDuration) external onlyOwner {
         require(_epochDuration >= MIN_EPOCH_DURATION, "< MIN_EPOCH_DURATION");
         EpochInfo memory _epochInfo = epochs[currentEpoch];
         require(_epochInfo.startTime + _epochDuration >= block.timestamp, "Invalid duration");
         epochDuration = _epochDuration;
 
-        emit EpochDurationSet(epochDuration);
+        emit EpochDurationSet(_epochDuration);
     }
 
     function setClaimableToken(address _token, bool _allowed) external onlyOwner {
