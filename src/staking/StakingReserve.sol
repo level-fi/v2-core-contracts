@@ -95,6 +95,7 @@ abstract contract StakingReserve is Initializable, OwnableUpgradeable {
             }
         }
         convertLLPTokens = _tokens;
+        emit ConvertLLPTokensSet(_tokens);
     }
 
     // =============== INTERNAL FUNCTIONS ===============
@@ -150,4 +151,5 @@ abstract contract StakingReserve is Initializable, OwnableUpgradeable {
     event FeeTokenSet(address indexed _token, bool _allowed);
     event Swap(address indexed _tokenIn, address indexed _tokenOut, uint256 _amountIn, uint256 _amountOut);
     event TokenWithdrawn(address indexed _to, uint256 _amount);
+    event ConvertLLPTokensSet(address[] _tokens);
 }
