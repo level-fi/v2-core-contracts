@@ -162,7 +162,7 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
         emit Staked(msg.sender, _to, currentEpoch, _stakedAmount, _taxAmount);
     }
 
-    function unstake(address _to, uint256 _amount) external whenNotPaused nonReentrant {
+    function unstake(address _to, uint256 _amount) external virtual nonReentrant {
         require(_to != address(0), "Invalid address");
         require(_amount > 0, "Invalid amount");
         address _sender = msg.sender;
