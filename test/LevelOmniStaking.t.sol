@@ -366,9 +366,11 @@ contract LevelOmniStakingTest is Test {
         lvlStaking.nextEpoch();
         LVL.mint(100 ether);
         LVL.transfer(address(lvlStaking), 100 ether);
-        uint256[] memory convertLLPAmounts = new uint256[](2);
-        convertLLPAmounts[0] = weth.balanceOf(address(lvlStaking));
-        convertLLPAmounts[1] = BTC.balanceOf(address(lvlStaking));
+        address[] memory convertLLPTokens = new address[](1);
+        convertLLPTokens[0] = address(BTC);
+
+        uint256[] memory convertLLPAmounts = new uint256[](1);
+        convertLLPAmounts[0] = BTC.balanceOf(address(lvlStaking));
         lvlStaking.allocateReward(0, convertLLPTokens, convertLLPAmounts);
         vm.stopPrank();
 
