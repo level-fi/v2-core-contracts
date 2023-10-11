@@ -42,7 +42,7 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
     }
 
     uint256 public constant STAKING_TAX_PRECISION = 1000;
-    uint256 public constant STAKING_TAX = 4; // 0.4%
+    uint256 public constant STAKING_TAX = 0; // 0.4%
     uint256 public constant MIN_EPOCH_DURATION = 1 days;
 
     IBurnableERC20 public stakeToken;
@@ -61,7 +61,7 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
     /// @notice list of epoch in which user updated their staked amount (stake or unstake)
     mapping(address userAddress => uint256[]) public userSnapshotEpochs;
     /// @notice list of tokens to which user can convert their reward. Note that they MUST pay the swap fee
-    mapping(address userAddress => bool) public claimableTokens;
+    mapping(address tokenAddress => bool) public claimableTokens;
 
     constructor() {
         _disableInitializers();
@@ -73,6 +73,7 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
         address _llp,
         address _weth,
         address _ethUnwrapper,
+        uint256 _startEpoch,
         uint256 _startTime
     ) external initializer {
         require(_stakeToken != address(0), "Invalid address");
@@ -82,11 +83,11 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
         __StakingReserve_init(_pool, _llp, _weth, _ethUnwrapper);
         stakeToken = IBurnableERC20(_stakeToken);
         epochDuration = 7 days;
-        // Start first epoch
+        currentEpoch = _startEpoch;
         lastEpochTimestamp = _startTime;
-        epochs[currentEpoch].startTime = _startTime;
-        epochs[currentEpoch].lastUpdateAccShareTime = _startTime;
-        emit EpochStarted(currentEpoch, _startTime);
+        epochs[_startEpoch].startTime = _startTime;
+        epochs[_startEpoch].lastUpdateAccShareTime = _startTime;
+        emit EpochStarted(_startEpoch, _startTime);
     }
 
     // =============== VIEW FUNCTIONS ===============
@@ -94,19 +95,8 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
         return lastEpochTimestamp + epochDuration;
     }
 
-    function pendingRewards(uint256 _epoch, address _user) public view returns (uint256 _pendingRewards) {
-        EpochInfo memory _epochInfo = epochs[_epoch];
-        if (_epochInfo.endTime != 0 && _epochInfo.totalReward != 0) {
-            UserInfo memory _userInfo = users[_user][_epoch];
-            uint256 _stakedAmount = getStakedAmountByEpoch(_epoch, _user);
-            uint256 _lastUpdateAccShareTime = _userInfo.lastUpdateAccShareTime;
-            if (_lastUpdateAccShareTime == 0) {
-                _lastUpdateAccShareTime = _epochInfo.startTime;
-            }
-            uint256 _userShare = _userInfo.accShare + ((_epochInfo.endTime - _lastUpdateAccShareTime) * _stakedAmount);
-            _pendingRewards =
-                ((_userShare * _epochInfo.totalReward) / _epochInfo.totalAccShare) - _userInfo.claimedReward;
-        }
+    function pendingRewards(uint256 _epoch, address _user) public view returns (uint256) {
+        return _pendingRewards(_epoch, _user);
     }
 
     /**
@@ -147,7 +137,8 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
     }
 
     // =============== USER FUNCTIONS ===============
-    function stake(address _to, uint256 _amount) external whenNotPaused nonReentrant {
+
+    function stake(address _to, uint256 _amount) external virtual whenNotPaused nonReentrant {
         require(_to != address(0), "Invalid address");
         require(_amount > 0, "Invalid amount");
         uint256 _taxAmount = (_amount * STAKING_TAX) / STAKING_TAX_PRECISION;
@@ -176,14 +167,12 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
 
     /// @notice claim rewards as LLP token
     function claimRewards(uint256 _epoch, address _to) external whenNotPaused nonReentrant {
-        require(_to != address(0), "Invalid address");
-        address _sender = msg.sender;
-        uint256 _pendingReward = pendingRewards(_epoch, _sender);
-        if (_pendingReward != 0) {
-            users[_sender][_epoch].claimedReward += _pendingReward;
-            _safeTransferToken(address(LLP), _to, _pendingReward);
-            emit Claimed(_sender, _to, _epoch, _pendingReward);
-        }
+        _claimRewards(msg.sender, _epoch, _to);
+    }
+
+    /// @notice claim multiple rewards as LLP token
+    function claimMultipleRewards(uint256[] calldata _epochs, address _to) external whenNotPaused nonReentrant {
+        _claimMultipleRewards(_epochs, _to, address(LLP), 0);
     }
 
     /// @notice claim then swap LLP token to one of the claimable tokens
@@ -192,15 +181,17 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
         whenNotPaused
         nonReentrant
     {
-        require(_to != address(0), "Invalid address");
-        require(claimableTokens[_tokenOut], "!claimableTokens");
-        address _sender = msg.sender;
-        uint256 _pendingReward = pendingRewards(_epoch, _sender);
-        if (_pendingReward != 0) {
-            users[_sender][_epoch].claimedReward += _pendingReward;
-            uint256 _amountOut = _convertLLPToToken(_to, _pendingReward, _tokenOut, _minAmountOut);
-            emit SingleTokenClaimed(_sender, _to, _epoch, _pendingReward, _tokenOut, _amountOut);
-        }
+        _claimRewardsToSingleToken(msg.sender, _epoch, _to, _tokenOut, _minAmountOut);
+    }
+
+    /// @notice claim multiple then swap LLP token to one of the claimable tokens
+    function claimMultipleRewardsToSingleToken(
+        uint256[] calldata _epochs,
+        address _to,
+        address _tokenOut,
+        uint256 _minAmountOut
+    ) external whenNotPaused nonReentrant {
+        _claimMultipleRewards(_epochs, _to, _tokenOut, _minAmountOut);
     }
 
     /// @notice end current epoch and start a new one. Note that the reward is not available at this moment
@@ -222,7 +213,7 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
     }
 
     /// @notice convert ALL fee tokens to LLP token then allocate to selected epoch. Epoch MUST be ended but not allocated
-    function allocateReward(uint256 _epoch) external onlyDistributorOrOwner {
+    function allocateReward(uint256 _epoch) external virtual onlyDistributorOrOwner {
         EpochInfo memory _epochInfo = epochs[_epoch];
         require(_epochInfo.endTime != 0, "Epoch not ended");
         require(_epochInfo.allocationTime == 0, "Reward allocated");
@@ -246,6 +237,7 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
     /// @notice convert SELECTED fee tokens to LLP token then allocate to selected epoch. Epoch MUST be ended but not allocated
     function allocateReward(uint256 _epoch, address[] calldata _tokens, uint256[] calldata _amounts)
         external
+        virtual
         onlyDistributorOrOwner
     {
         uint256 _tokenLength = _tokens.length;
@@ -340,6 +332,82 @@ contract LevelOmniStaking is Initializable, PausableUpgradeable, ReentrancyGuard
         stakedAmounts[_user] = _isIncrease ? _currentStakedAmounts + _amount : _currentStakedAmounts - _amount;
         _userSnapshot.amount = stakedAmounts[_user];
         users[_user][currentEpoch] = _userSnapshot;
+    }
+
+    function _claimRewards(address _user, uint256 _epoch, address _to) internal {
+        require(_user != address(0), "Invalid address");
+        require(_to != address(0), "Invalid address");
+        uint256 _pendingRewards = _pendingRewards(_epoch, _user);
+        if (_pendingRewards != 0) {
+            users[_user][_epoch].claimedReward += _pendingRewards;
+            _safeTransferToken(address(LLP), _to, _pendingRewards);
+            emit Claimed(_user, _to, _epoch, _pendingRewards);
+        }
+    }
+
+    function _claimRewardsToSingleToken(
+        address _user,
+        uint256 _epoch,
+        address _to,
+        address _tokenOut,
+        uint256 _minAmountOut
+    ) internal {
+        require(_user != address(0), "Invalid address");
+        require(_to != address(0), "Invalid address");
+        require(claimableTokens[_tokenOut], "!claimableTokens");
+        uint256 _pendingRewards = _pendingRewards(_epoch, _user);
+        if (_pendingRewards != 0) {
+            users[_user][_epoch].claimedReward += _pendingRewards;
+            uint256 _amountOut = _convertLLPToToken(_to, _pendingRewards, _tokenOut, _minAmountOut);
+            emit SingleTokenClaimed(_user, _to, _epoch, _pendingRewards, _tokenOut, _amountOut);
+        }
+    }
+
+    function _claimMultipleRewards(uint256[] calldata _epochs, address _to, address _tokenOut, uint256 _minAmountOut)
+        internal
+    {
+        require(_to != address(0), "Invalid address");
+        address _sender = msg.sender;
+        uint256 _length = _epochs.length;
+        uint256 _totalPendingRewards;
+        for (uint256 i = 0; i < _length;) {
+            uint256 _epoch = _epochs[i];
+            uint256 _pendingRewards = _pendingRewards(_epoch, _sender);
+            if (_pendingRewards != 0) {
+                _totalPendingRewards += _pendingRewards;
+                users[_sender][_epoch].claimedReward += _pendingRewards;
+                emit Claimed(_sender, _to, _epoch, _pendingRewards);
+            }
+
+            unchecked {
+                ++i;
+            }
+        }
+        if (_totalPendingRewards != 0) {
+            if (_tokenOut == address(LLP)) {
+                _safeTransferToken(address(LLP), _to, _totalPendingRewards);
+            } else {
+                require(claimableTokens[_tokenOut], "!claimableTokens");
+                _convertLLPToToken(_to, _totalPendingRewards, _tokenOut, _minAmountOut);
+            }
+        }
+    }
+
+    function _pendingRewards(uint256 _epoch, address _user) internal view returns (uint256 _pendingRewards) {
+        EpochInfo memory _epochInfo = epochs[_epoch];
+        if (_epochInfo.endTime != 0 && _epochInfo.totalReward != 0) {
+            UserInfo memory _userInfo = users[_user][_epoch];
+            uint256 _stakedAmount = getStakedAmountByEpoch(_epoch, _user);
+            uint256 _lastUpdateAccShareTime = _userInfo.lastUpdateAccShareTime;
+            if (_lastUpdateAccShareTime == 0) {
+                _lastUpdateAccShareTime = _epochInfo.startTime;
+            }
+            uint256 _userShare = _userInfo.accShare + ((_epochInfo.endTime - _lastUpdateAccShareTime) * _stakedAmount);
+            if (_epochInfo.totalAccShare != 0) {
+                _pendingRewards =
+                    ((_userShare * _epochInfo.totalReward) / _epochInfo.totalAccShare) - _userInfo.claimedReward;
+            }
+        }
     }
 
     // =============== EVENTS ===============

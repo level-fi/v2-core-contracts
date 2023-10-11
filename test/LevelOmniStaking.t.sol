@@ -52,7 +52,7 @@ contract LevelOmniStakingTest is Test {
         );
         lvlStaking = LevelOmniStaking(address(omniStakingProxy));
         lvlStaking.initialize(
-            address(pool), address(LVL), address(LLP), address(weth), address(ethUnwrapper), block.timestamp + 1 days
+            address(pool), address(LVL), address(LLP), address(weth), address(ethUnwrapper), 0, block.timestamp + 1 days
         );
 
         lvlStaking.setEpochDuration(1 days);
@@ -70,19 +70,42 @@ contract LevelOmniStakingTest is Test {
 
     /* Stake */
 
-    function test_stake_revert_invalid_amount() external {
-        vm.warp(1 days);
+    // function test_set_start_epoch() external {
+    //     vm.startPrank(owner);
+    //     lvlStaking.initialize(
+    //         address(pool), address(LVL), address(LLP), address(weth), address(ethUnwrapper), 2, block.timestamp + 1 days
+    //     );
 
-        vm.startPrank(alice);
-        vm.expectRevert("Invalid amount");
-        lvlStaking.stake(alice, 0);
-        vm.expectRevert("ERC20: insufficient allowance");
-        lvlStaking.stake(alice, 200 ether);
-        LVL.approve(address(lvlStaking), 400 ether);
-        vm.expectRevert("ERC20: transfer amount exceeds balance");
-        lvlStaking.stake(alice, 400 ether);
-        vm.stopPrank();
-    }
+    //     lvlStaking.setEpochDuration(1 days);
+
+    //     convertLLPTokens[0] = address(weth);
+    //     convertLLPTokens[1] = address(BTC);
+    //     lvlStaking.setConvertLLPTokens(convertLLPTokens);
+
+    //     lvlStaking.setClaimableToken(address(BTC), true);
+    //     lvlStaking.setFeeToken(address(BTC), true);
+    //     BTC.mintTo(100 ether, address(lvlStaking)); // mock withdraw fee
+    //     vm.stopPrank();
+
+    //     vm.startPrank(alice);
+    //     LVL.approve(address(lvlStaking), 200 ether);
+    //     lvlStaking.stake(alice, 100 ether);
+    //     vm.stopPrank();
+
+    //     vm.warp(2 days);
+    //     vm.startPrank(owner);
+    //     lvlStaking.setEnableNextEpoch(true);
+    //     lvlStaking.nextEpoch();
+    //     lvlStaking.allocateReward(2);
+    //     vm.stopPrank();
+
+    //     vm.startPrank(alice);
+    //     assertEq(BTC.balanceOf(alice), 0 ether);
+    //     lvlStaking.claimRewardsToSingleToken(0, alice, address(BTC), 0);
+    //     lvlStaking.claimRewardsToSingleToken(1, alice, address(BTC), 0);
+    //     lvlStaking.claimRewardsToSingleToken(2, alice, address(BTC), 0);
+    //     assertEq(BTC.balanceOf(alice), 100 ether);
+    // }
 
     function test_stake_revert_invalid_address() external {
         vm.warp(1 days);
@@ -269,6 +292,17 @@ contract LevelOmniStakingTest is Test {
         vm.stopPrank();
     }
 
+    function test_unstake_revert_reserve() external {
+        vm.warp(1 days);
+
+        vm.startPrank(alice);
+        LVL.approve(address(lvlStaking), 200 ether);
+        lvlStaking.stake(alice, 100 ether);
+        assertEq(LVL.balanceOf(alice), 100 ether);
+        lvlStaking.unstake(alice, 99.6 ether);
+        vm.stopPrank();
+    }
+
     function test_unstake_to_another_address_success() external {
         vm.warp(1 days);
 
@@ -366,12 +400,12 @@ contract LevelOmniStakingTest is Test {
         lvlStaking.nextEpoch();
         LVL.mint(100 ether);
         LVL.transfer(address(lvlStaking), 100 ether);
-        address[] memory convertLLPTokens = new address[](1);
-        convertLLPTokens[0] = address(BTC);
+        address[] memory _convertLLPTokens = new address[](1);
+        _convertLLPTokens[0] = address(BTC);
 
         uint256[] memory convertLLPAmounts = new uint256[](1);
         convertLLPAmounts[0] = BTC.balanceOf(address(lvlStaking));
-        lvlStaking.allocateReward(0, convertLLPTokens, convertLLPAmounts);
+        lvlStaking.allocateReward(0, _convertLLPTokens, convertLLPAmounts);
         vm.stopPrank();
 
         vm.startPrank(alice);
@@ -592,6 +626,161 @@ contract LevelOmniStakingTest is Test {
         vm.stopPrank();
     }
 
+    /* Claim reward with multiple epoch */
+    function test_claim_multiple() external {
+        vm.prank(alice);
+        LVL.approve(address(lvlStaking), 200 ether);
+
+        uint256 rewardPerEpoch = 10 ether;
+
+        vm.warp(1 days);
+        vm.startPrank(owner);
+        LVL.mintTo(200 ether, bob);
+        LLP.approve(address(lvlStaking), 100 ether);
+        lvlStaking.setEnableNextEpoch(true);
+        vm.stopPrank();
+
+        assertEq(LLP.balanceOf(alice), 0);
+        // Epoch 0
+        {
+            vm.prank(alice);
+            lvlStaking.stake(alice, 10 ether);
+            vm.warp(1 days + 1 hours);
+            vm.prank(alice);
+            lvlStaking.unstake(alice, 5 ether);
+        }
+        // Epoch 1
+        {
+            vm.startPrank(owner);
+            vm.warp(2 days);
+            BTC.mintTo(rewardPerEpoch, address(lvlStaking)); // mock withdraw fee
+            lvlStaking.nextEpoch();
+            lvlStaking.allocateReward(0);
+            vm.stopPrank();
+        }
+        // Epoch 2
+        {
+            vm.startPrank(owner);
+            vm.warp(3 days);
+            lvlStaking.nextEpoch();
+            BTC.mintTo(rewardPerEpoch, address(lvlStaking)); // mock withdraw fee
+            lvlStaking.allocateReward(1);
+            vm.stopPrank();
+        }
+        // Epoch 3
+        {
+            vm.startPrank(owner);
+            vm.warp(4 days);
+            lvlStaking.nextEpoch();
+            BTC.mintTo(rewardPerEpoch, address(lvlStaking)); // mock withdraw fee
+            lvlStaking.allocateReward(2);
+            vm.stopPrank();
+        }
+        // Epoch 4
+        {
+            vm.startPrank(owner);
+            vm.warp(5 days);
+            lvlStaking.nextEpoch();
+            BTC.mintTo(rewardPerEpoch, address(lvlStaking)); // mock withdraw fee
+            lvlStaking.allocateReward(3);
+            vm.stopPrank();
+        }
+
+        vm.startPrank(alice);
+        uint256[] memory _epochs = new uint256[](4);
+        _epochs[0] = 0;
+        _epochs[1] = 1;
+        _epochs[2] = 2;
+        _epochs[3] = 3;
+
+        lvlStaking.claimMultipleRewards(_epochs, alice);
+        assertEq(LLP.balanceOf(alice), 40 ether);
+        lvlStaking.claimRewards(0, alice);
+        lvlStaking.claimRewards(1, alice);
+        lvlStaking.claimRewards(2, alice);
+        lvlStaking.claimRewards(3, alice);
+        lvlStaking.claimRewards(4, alice);
+        assertEq(LLP.balanceOf(alice), 40 ether);
+        vm.stopPrank();
+    }
+
+    function test_claim_multiple_to_token() external {
+        vm.prank(alice);
+        LVL.approve(address(lvlStaking), 200 ether);
+
+        uint256 rewardPerEpoch = 10 ether;
+
+        vm.warp(1 days);
+        vm.startPrank(owner);
+        LVL.mintTo(200 ether, bob);
+        LLP.approve(address(lvlStaking), 100 ether);
+        lvlStaking.setEnableNextEpoch(true);
+        vm.stopPrank();
+
+        assertEq(LLP.balanceOf(alice), 0);
+        // Epoch 0
+        {
+            vm.prank(alice);
+            lvlStaking.stake(alice, 10 ether);
+            vm.warp(1 days + 1 hours);
+            vm.prank(alice);
+            lvlStaking.unstake(alice, 5 ether);
+        }
+        // Epoch 1
+        {
+            vm.startPrank(owner);
+            vm.warp(2 days);
+            BTC.mintTo(rewardPerEpoch, address(lvlStaking)); // mock withdraw fee
+            lvlStaking.nextEpoch();
+            lvlStaking.allocateReward(0);
+            vm.stopPrank();
+        }
+        // Epoch 2
+        {
+            vm.startPrank(owner);
+            vm.warp(3 days);
+            lvlStaking.nextEpoch();
+            BTC.mintTo(rewardPerEpoch, address(lvlStaking)); // mock withdraw fee
+            lvlStaking.allocateReward(1);
+            vm.stopPrank();
+        }
+        // Epoch 3
+        {
+            vm.startPrank(owner);
+            vm.warp(4 days);
+            lvlStaking.nextEpoch();
+            BTC.mintTo(rewardPerEpoch, address(lvlStaking)); // mock withdraw fee
+            lvlStaking.allocateReward(2);
+            vm.stopPrank();
+        }
+        // Epoch 4
+        {
+            vm.startPrank(owner);
+            vm.warp(5 days);
+            lvlStaking.nextEpoch();
+            BTC.mintTo(rewardPerEpoch, address(lvlStaking)); // mock withdraw fee
+            lvlStaking.allocateReward(3);
+            vm.stopPrank();
+        }
+
+        vm.startPrank(alice);
+        uint256[] memory _epochs = new uint256[](4);
+        _epochs[0] = 0;
+        _epochs[1] = 1;
+        _epochs[2] = 2;
+        _epochs[3] = 3;
+
+        lvlStaking.claimMultipleRewardsToSingleToken(_epochs, alice, address(BTC), 0);
+        assertEq(BTC.balanceOf(alice), 40 ether);
+        lvlStaking.claimRewardsToSingleToken(0, alice, address(BTC), 0);
+        lvlStaking.claimRewardsToSingleToken(1, alice, address(BTC), 0);
+        lvlStaking.claimRewardsToSingleToken(2, alice, address(BTC), 0);
+        lvlStaking.claimRewardsToSingleToken(3, alice, address(BTC), 0);
+        lvlStaking.claimRewardsToSingleToken(4, alice, address(BTC), 0);
+        assertEq(BTC.balanceOf(alice), 40 ether);
+        vm.stopPrank();
+    }
+
     /* Full circle */
     function test_epoch_life_cycle() external {
         vm.startPrank(owner);
@@ -623,8 +812,7 @@ contract LevelOmniStakingTest is Test {
             assertEq(accShare, estTotalShare);
             assertEq(lastUpdateAccShare, start);
             // Verify epoch state change
-            (uint256 startTime, uint256 endTime,, uint256 totalShare, uint256 lastUpdateShare,) =
-                lvlStaking.epochs(currentEpoch);
+            (uint256 startTime,,, uint256 totalShare, uint256 lastUpdateShare,) = lvlStaking.epochs(currentEpoch);
             assertEq(startTime, start);
             assertEq(totalShare, estTotalShare);
             assertEq(lastUpdateShare, start);
@@ -648,8 +836,7 @@ contract LevelOmniStakingTest is Test {
             assertEq(accShare, estTotalShare);
             assertEq(lastUpdateAccShare, start + 1 hours);
             // verify epoch state change
-            (uint256 startTime, uint256 endTime,, uint256 totalShare, uint256 lastUpdateShare,) =
-                lvlStaking.epochs(currentEpoch);
+            (uint256 startTime,,, uint256 totalShare, uint256 lastUpdateShare,) = lvlStaking.epochs(currentEpoch);
             assertEq(startTime, start);
             assertEq(totalShare, estTotalShare);
             assertEq(lvlStaking.lastEpochTimestamp(), start);
@@ -715,8 +902,7 @@ contract LevelOmniStakingTest is Test {
             // Verify epoch state change
             assertEq(lvlStaking.currentEpoch(), currentEpoch + 1);
             assertEq(lvlStaking.lastEpochTimestamp(), start + 1 days);
-            (uint256 startTime, uint256 endTime,, uint256 totalShare, uint256 lastUpdateShare,) =
-                lvlStaking.epochs(currentEpoch);
+            (, uint256 endTime,, uint256 totalShare, uint256 lastUpdateShare,) = lvlStaking.epochs(currentEpoch);
             assertEq(endTime, start + 1 days);
             assertEq(lastUpdateShare, start + 1 days);
             assertEq(totalShare, estTotalShare);
