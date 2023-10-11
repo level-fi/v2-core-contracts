@@ -59,6 +59,8 @@ interface IPool {
 
     function withdrawFee(address _token, address _recipient) external;
 
+    function isTranche(address _token) external view returns (bool);
+
     // =========== EVENTS ===========
 
     event SetOrderManager(address indexed orderManager);
